@@ -131,7 +131,7 @@
             background-color: #7f39fb;
             transform: translateY(-1px);
         }
-        #stop-btn, #cancel-btn, #flash-btn {
+        #stop-btn, #flash-btn {
             background-color: #d81b60;
         }
         #stop-btn:hover, #cancel-btn:hover, #flash-btn:hover {
@@ -316,7 +316,7 @@
             <button id="stop-btn" style="display: none;">Stop Camera</button>
             <button id="flash-btn" style="display: none;">Flash Off</button>
             <input type="file" id="file-input" accept="image/*">
-            <button id="cancel-btn" style="display: none;">Cancel</button>
+            <button id="cancel-btn" style="display: none;">wrong image?, refresh the page to cancel</button>
         </div>
         <div id="output">Position a QR code or barcode in front of the camera or upload an image</div>
         <button id="copy-btn">Copy Result</button>
@@ -405,6 +405,73 @@
             guideCtx.stroke();
         }
 
+        // Function to check camera permissions
+        async function checkCameraPermission() {
+            try {
+                const permissionStatus = await navigator.permissions.query({ name: 'camera' });
+                console.log('Camera permission status:', permissionStatus.state);
+                if (permissionStatus.state === 'denied') {
+                    output.textContent = 'Camera access denied. Please enable camera permissions in your browser settings and try again.';
+                    output.classList.remove('loading');
+                    output.classList.add('error');
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                console.error('Error checking camera permission:', err);
+                return true; // Proceed if permission API is not supported
+            }
+        }
+
+        // Function to start camera with retry mechanism
+        async function startCamera() {
+            output.textContent = 'Requesting camera access...';
+            output.classList.add('loading');
+            output.classList.remove('error');
+
+            // Check permission status first
+            const hasPermission = await checkCameraPermission();
+            if (!hasPermission) return;
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                video.srcObject = stream;
+                await video.play(); // Ensure video starts playing
+                videoTrack = stream.getVideoTracks()[0];
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'inline-block';
+                flashBtn.style.display = 'inline-block';
+                updateFlashButton();
+                output.textContent = scanMode === 'qr' ? 'Scanning for QR code...' : 'Scanning for barcode...';
+                output.classList.add('loading');
+                output.classList.remove('error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+                scanning = true;
+                scanCode();
+                drawGuideLines(); // Draw guiding lines when camera starts
+            } catch (err) {
+                console.error('Camera access error:', err);
+                let errorMessage = 'Error accessing camera: ' + err.message;
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    errorMessage = 'Camera access denied. Please allow camera access in the browser prompt or check your browser settings (chrome://settings/content/camera).';
+                } else if (err.name === 'NotFoundError') {
+                    errorMessage = 'No camera found. Please ensure a camera is connected and try again.';
+                }
+                output.textContent = errorMessage;
+                output.classList.remove('loading');
+                output.classList.add('error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+            }
+        }
+
         // Show/hide info modal
         infoBtn.addEventListener('click', () => {
             infoModal.style.display = 'flex';
@@ -447,36 +514,7 @@
 
         // Start camera
         startBtn.addEventListener('click', async () => {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                });
-                video.srcObject = stream;
-                video.play();
-                videoTrack = stream.getVideoTracks()[0];
-                startBtn.style.display = 'none';
-                stopBtn.style.display = 'inline-block';
-                flashBtn.style.display = 'inline-block';
-                updateFlashButton();
-                output.textContent = scanMode === 'qr' ? 'Scanning for QR code...' : 'Scanning for barcode...';
-                output.classList.add('loading');
-                output.classList.remove('error');
-                copyBtn.style.display = 'none';
-                copyMessage.style.display = 'none';
-                scanning = true;
-                scanCode();
-                drawGuideLines(); // Draw guiding lines when camera starts
-            } catch (err) {
-                output.textContent = 'Error accessing camera: ' + err.message;
-                output.classList.remove('loading');
-                output.classList.add('error');
-                copyBtn.style.display = 'none';
-                copyMessage.style.display = 'none';
-            }
+            await startCamera();
         });
 
         // Stop camera
@@ -549,7 +587,7 @@
                     copyMessage.style.display = 'none';
                     resetUploadState();
                 }
-            }, 60000);
+            }, 300);
 
             const img = new Image();
             img.onload = async () => {
