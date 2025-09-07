@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR & Barcode Scanner</title>
+    <link rel="icon" type="image/x-icon" href="https://img.icons8.com/ios-filled/50/ffffff/qr-code.png">
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .logo {
+            width: 32px;
+            height: 32px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 1;
+            border: 2px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: #1e1e1e;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+            transition: transform 0.3s ease;
+        }
+        #video-container:hover {
+            transform: translateY(-2px);
+        }
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #canvas {
+            display: none;
+        }
+        #guide-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #output {
+            padding: 20px;
+            background-color: #1e1e1e;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 500px;
+            min-height: 80px;
+            text-align: center;
+            word-wrap: break-word;
+            color: #e0e0e0;
+            font-size: 16px;
+            font-weight: 400;
+            line-height: 1.5;
+            transition: all 0.3s ease;
+        }
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-left: 10px;
+            border: 3px solid #6200ea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            color: #f44336;
+            background-color: #000000;
+            font-weight: bold;
+        }
+        .controls, .mode-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin: 15px 0;
+        }
+        button, input[type="file"] {
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            background-color: #6200ea;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        button:hover, input[type="file"]:hover {
+            background-color: #7f39fb;
+            transform: translateY(-1px);
+        }
+        #stop-btn, #cancel-btn, #flash-btn {
+            background-color: #d81b60;
+        }
+        #stop-btn:hover, #cancel-btn:hover, #flash-btn:hover {
+            background-color: #f06292;
+            transform: translateY(-1px);
+        }
+        #flash-btn.on {
+            background-color: #4CAF50;
+        }
+        #flash-btn.on:hover {
+            background-color: #45a049;
+            transform: translateY(-1px);
+        }
+        input[type="file"]:disabled, button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #copy-btn {
+            margin-top: 10px;
+            display: none;
+        }
+        #copy-message {
+            display: none;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #4CAF50;
+            font-weight: 500;
+        }
+        #copy-message.error {
+            color: #f44336;
+        }
+        .mode-selector button.active {
+            background-color: #4CAF50;
+        }
+        .mode-selector button.active:hover {
+            background-color: #45a049;
+        }
+        #info-btn {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            font-size: 12px;
+            padding: 6px;
+            background-color: #6200ea;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        #info-btn:hover {
+            background-color: #7f39fb;
+            transform: translateY(-1px);
+        }
+        #info-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        #info-content {
+            background-color: #1e1e1e;
+            padding: 24px;
+            border-radius: 12px;
+            max-width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            color: #e0e0e0;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+        #info-content h2 {
+            margin-top: 0;
+            font-size: 22px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+        #info-content ul {
+            margin: 12px 0;
+            padding-left: 24px;
+        }
+        #info-content p {
+            margin: 12px 0;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+        #close-info-btn {
+            margin-top: 12px;
+            background-color: #d81b60;
+        }
+        #close-info-btn:hover {
+            background-color: #f06292;
+            transform: translateY(-1px);
+        }
+        footer {
+            margin-top: auto;
+            padding: 20px 0;
+            color: #666;
+            font-size: 14px;
+            font-weight: 400;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="https://img.icons8.com/ios-filled/50/ffffff/qr-code.png" alt="QR Scanner Icon" class="logo">
+        <h1>QR & Barcode Scanner</h1>
+    </header>
+    <div class="container">
+        <div class="mode-selector">
+            <button id="qr-mode-btn" class="active">QR Code Mode</button>
+            <button id="barcode-mode-btn">Barcode Mode</button>
+        </div>
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <canvas id="guide-canvas"></canvas>
+            <button id="info-btn" title="Scanner Information">?</button>
+        </div>
+        <div id="info-modal">
+            <div id="info-content">
+                <h2>Scanner Capabilities</h2>
+                <p>This application supports scanning both QR codes and various barcode formats using your device's camera or uploaded images.</p>
+                <h3>Supported Formats</h3>
+                <ul>
+                    <li><strong>QR Code</strong>: Scanned using the jsQR library, supports standard QR codes containing URLs, text, or other data.</li>
+                    <li><strong>Barcodes</strong> (via ZXing library):
+                        <ul>
+                            <li>EAN-13</li>
+                            <li>EAN-8</li>
+                            <li>UPC-A</li>
+                            <li>UPC-E</li>
+                            <li>Code 128</li>
+                            <li>Code 39</li>
+                            <li>Code 93</li>
+                            <li>Codabar</li>
+                            <li>ITF (Interleaved 2 of 5)</li>
+                            <li>RSS-14</li>
+                            <li>RSS-Expanded</li>
+                            <li>Data Matrix</li>
+                            <li>Aztec</li>
+                            <li>PDF417</li>
+                        </ul>
+                    </li>
+                </ul>
+                <h3>Unsupported Formats</h3>
+                <ul>
+                    <li>Some proprietary or niche barcode formats not supported by ZXing.</li>
+                    <li>Damaged or low-quality codes that cannot be decoded.</li>
+                    <li>Non-standard QR code variants not compatible with jsQR.</li>
+                </ul>
+                <h3>How Images Are Processed</h3>
+                <p><strong>Camera Scanning</strong>: The application captures video frames from your device's camera. Each frame is drawn onto a canvas, and the image data is analyzed using jsQR (for QR codes) or ZXing (for barcodes). When a code is detected, its content is displayed, and the device vibrates briefly.</p>
+                <p><strong>File Upload</strong>: Uploaded images are loaded onto a canvas, and the image data is processed similarly using jsQR or ZXing, depending on the selected mode. If a code is detected, its content is displayed, and the device vibrates. If no code is found, an error message is shown.</p>
+                <p><strong>Tips for Successful Scanning</strong>:
+                    <ul>
+                        <li>Ensure good lighting and focus.</li>
+                        <li>Position the code centrally within the camera frame or image, aligning with the guiding lines.</li>
+                        <li>Use high-resolution images for uploads.</li>
+                        <li>Switch to the correct mode (QR or Barcode) for the code type.</li>
+                    </ul>
+                </p>
+                <button id="close-info-btn">Close</button>
+            </div>
+        </div>
+        <div class="controls">
+            <button id="start-btn">Start Camera</button>
+            <button id="stop-btn" style="display: none;">Stop Camera</button>
+            <button id="flash-btn" style="display: none;">Flash Off</button>
+            <input type="file" id="file-input" accept="image/*">
+            <button id="cancel-btn" style="display: none;">Cancel</button>
+        </div>
+        <div id="output">Position a QR code or barcode in front of the camera or upload an image</div>
+        <button id="copy-btn">Copy Result</button>
+        <span id="copy-message"></span>
+    </div>
+    <footer>Made by Norwell</footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const guideCanvas = document.getElementById('guide-canvas');
+        const guideCtx = guideCanvas.getContext('2d');
+        const output = document.getElementById('output');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const flashBtn = document.getElementById('flash-btn');
+        const fileInput = document.getElementById('file-input');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        const copyMessage = document.getElementById('copy-message');
+        const qrModeBtn = document.getElementById('qr-mode-btn');
+        const barcodeModeBtn = document.getElementById('barcode-mode-btn');
+        const infoBtn = document.getElementById('info-btn');
+        const infoModal = document.getElementById('info-modal');
+        const closeInfoBtn = document.getElementById('close-info-btn');
+        let stream = null;
+        let videoTrack = null;
+        let scanning = false;
+        let processing = false;
+        let flashOn = false;
+        let timeoutId = null;
+        let lastScannedContent = null; // Track last scanned content
+        let scanMode = 'qr'; // Default mode is QR code
+
+        // Function to trigger vibration
+        function triggerVibration() {
+            if ('vibrate' in navigator) {
+                navigator.vibrate(200); // Vibrate for 200ms
+            } else {
+                console.log('Vibration API not supported on this device/browser.');
+            }
+        }
+
+        // Function to draw guiding lines
+        function drawGuideLines() {
+            if (!video.srcObject || !video.videoWidth || !video.videoHeight) return;
+
+            guideCanvas.width = video.videoWidth;
+            guideCanvas.height = video.videoHeight;
+
+            guideCtx.clearRect(0, 0, guideCanvas.width, guideCanvas.height);
+            guideCtx.strokeStyle = '#4CAF50'; // Green color for guiding lines
+            guideCtx.lineWidth = 2;
+
+            // Calculate guide rectangle (50% of video width/height, centered)
+            const guideSize = Math.min(guideCanvas.width, guideCanvas.height) * 0.5;
+            const x = (guideCanvas.width - guideSize) / 2;
+            const y = (guideCanvas.height - guideSize) / 2;
+
+            // Draw corner lines (L-shaped)
+            const cornerLength = guideSize * 0.2; // 20% of guide size for corners
+            guideCtx.beginPath();
+            // Top-left corner
+            guideCtx.moveTo(x, y);
+            guideCtx.lineTo(x + cornerLength, y);
+            guideCtx.moveTo(x, y);
+            guideCtx.lineTo(x, y + cornerLength);
+            // Top-right corner
+            guideCtx.moveTo(x + guideSize, y);
+            guideCtx.lineTo(x + guideSize - cornerLength, y);
+            guideCtx.moveTo(x + guideSize, y);
+            guideCtx.lineTo(x + guideSize, y + cornerLength);
+            // Bottom-left corner
+            guideCtx.moveTo(x, y + guideSize);
+            guideCtx.lineTo(x + cornerLength, y + guideSize);
+            guideCtx.moveTo(x, y + guideSize);
+            guideCtx.lineTo(x, y + guideSize - cornerLength);
+            // Bottom-right corner
+            guideCtx.moveTo(x + guideSize, y + guideSize);
+            guideCtx.lineTo(x + guideSize - cornerLength, y + guideSize);
+            guideCtx.moveTo(x + guideSize, y + guideSize);
+            guideCtx.lineTo(x + guideSize, y + guideSize - cornerLength);
+            guideCtx.stroke();
+        }
+
+        // Show/hide info modal
+        infoBtn.addEventListener('click', () => {
+            infoModal.style.display = 'flex';
+        });
+
+        closeInfoBtn.addEventListener('click', () => {
+            infoModal.style.display = 'none';
+        });
+
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                infoModal.style.display = 'none';
+            }
+        });
+
+        // Mode switching
+        qrModeBtn.addEventListener('click', () => {
+            scanMode = 'qr';
+            qrModeBtn.classList.add('active');
+            barcodeModeBtn.classList.remove('active');
+            output.textContent = 'Position a QR code in front of the camera or upload an image';
+            output.classList.remove('loading', 'error');
+            copyBtn.style.display = 'none';
+            copyMessage.style.display = 'none';
+            lastScannedContent = null; // Reset last scanned content
+            if (scanning) scanCode(); // Restart scanning if active
+        });
+
+        barcodeModeBtn.addEventListener('click', () => {
+            scanMode = 'barcode';
+            barcodeModeBtn.classList.add('active');
+            qrModeBtn.classList.remove('active');
+            output.textContent = 'Position a barcode in front of the camera or upload an image';
+            output.classList.remove('loading', 'error');
+            copyBtn.style.display = 'none';
+            copyMessage.style.display = 'none';
+            lastScannedContent = null; // Reset last scanned content
+            if (scanning) scanCode(); // Restart scanning if active
+        });
+
+        // Start camera
+        startBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                video.srcObject = stream;
+                video.play();
+                videoTrack = stream.getVideoTracks()[0];
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'inline-block';
+                flashBtn.style.display = 'inline-block';
+                updateFlashButton();
+                output.textContent = scanMode === 'qr' ? 'Scanning for QR code...' : 'Scanning for barcode...';
+                output.classList.add('loading');
+                output.classList.remove('error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+                scanning = true;
+                scanCode();
+                drawGuideLines(); // Draw guiding lines when camera starts
+            } catch (err) {
+                output.textContent = 'Error accessing camera: ' + err.message;
+                output.classList.remove('loading');
+                output.classList.add('error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+            }
+        });
+
+        // Stop camera
+        stopBtn.addEventListener('click', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                guideCtx.clearRect(0, 0, guideCanvas.width, guideCanvas.height); // Clear guide lines
+                startBtn.style.display = 'inline-block';
+                stopBtn.style.display = 'none';
+                flashBtn.style.display = 'none';
+                scanning = false;
+                lastScannedContent = null;
+                output.textContent = scanMode === 'qr' ? 'Camera stopped. Start again or upload a QR code image.' : 'Camera stopped. Start again or upload a barcode image.';
+                output.classList.remove('loading', 'error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+            }
+        });
+
+        // Flashlight toggle
+        flashBtn.addEventListener('click', async () => {
+            if (videoTrack) {
+                flashOn = !flashOn;
+                try {
+                    await videoTrack.applyConstraints({
+                        advanced: [{ torch: flashOn }]
+                    });
+                    updateFlashButton();
+                } catch (err) {
+                    console.error('Error toggling flashlight:', err);
+                    flashOn = !flashOn; // Revert if failed
+                    updateFlashButton();
+                    output.textContent = 'Flashlight not supported or error occurred.';
+                    output.classList.add('error');
+                    copyBtn.style.display = 'none';
+                    copyMessage.style.display = 'none';
+                }
+            }
+        });
+
+        function updateFlashButton() {
+            flashBtn.textContent = flashOn ? 'Flash On' : 'Flash Off';
+            flashBtn.classList.toggle('on', flashOn);
+        }
+
+        // File upload
+        fileInput.addEventListener('change', (e) => {
+            if (processing) return;
+            const file = e.target.files[0];
+            if (!file) return;
+
+            processing = true;
+            fileInput.disabled = true;
+            cancelBtn.style.display = 'inline-block';
+            output.textContent = scanMode === 'qr' ? 'Processing QR code image...' : 'Processing barcode image...';
+            output.classList.add('loading');
+            output.classList.remove('error');
+            copyBtn.style.display = 'none';
+            copyMessage.style.display = 'none';
+
+            timeoutId = setTimeout(() => {
+                if (processing) {
+                    output.textContent = scanMode === 'qr' 
+                        ? 'No QR code found. Please try again or use a different photo.' 
+                        : 'No barcode found. Please try again or use a different photo.';
+                    output.classList.remove('loading');
+                    output.classList.add('error');
+                    copyBtn.style.display = 'none';
+                    copyMessage.style.display = 'none';
+                    resetUploadState();
+                }
+            }, 60000);
+
+            const img = new Image();
+            img.onload = async () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                if (scanMode === 'qr') {
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: 'attemptBoth'
+                    });
+                    if (code && code.data !== lastScannedContent) {
+                        lastScannedContent = code.data;
+                        output.textContent = `QR Code Content: ${code.data}`;
+                        output.classList.remove('loading', 'error');
+                        copyBtn.style.display = 'inline-block';
+                        copyMessage.style.display = 'none';
+                        triggerVibration(); // Trigger vibration on successful scan
+                    } else if (!code) {
+                        output.textContent = 'No QR code found. Please try again or use a different photo.';
+                        output.classList.remove('loading');
+                        output.classList.add('error');
+                        copyBtn.style.display = 'none';
+                        copyMessage.style.display = 'none';
+                    }
+                } else {
+                    try {
+                        const codeReader = new ZXing.BrowserMultiFormatReader();
+                        const result = await codeReader.decodeFromImageElement(img);
+                        if (result && result.text !== lastScannedContent) {
+                            lastScannedContent = result.text;
+                            output.textContent = `Barcode Content: ${result.text} (${result.format})`;
+                            output.classList.remove('loading', 'error');
+                            copyBtn.style.display = 'inline-block';
+                            copyMessage.style.display = 'none';
+                            triggerVibration(); // Trigger vibration on successful scan
+                        } else {
+                            output.textContent = 'No barcode found. Please try again or use a different photo.';
+                            output.classList.remove('loading');
+                            output.classList.add('error');
+                            copyBtn.style.display = 'none';
+                            copyMessage.style.display = 'none';
+                        }
+                    } catch (err) {
+                        console.error('Barcode decoding error:', err);
+                        output.textContent = 'No barcode found. Please try again or use a different photo.';
+                        output.classList.remove('loading');
+                        output.classList.add('error');
+                        copyBtn.style.display = 'none';
+                        copyMessage.style.display = 'none';
+                    }
+                }
+                clearTimeout(timeoutId);
+                resetUploadState();
+                URL.revokeObjectURL(img.src);
+            };
+            img.src = URL.createObjectURL(file);
+        });
+
+        // Cancel button
+        cancelBtn.addEventListener('click', () => {
+            if (processing) {
+                clearTimeout(timeoutId);
+                resetUploadState();
+                output.textContent = scanMode === 'qr' ? 'Processing cancelled. Upload a new QR code image.' : 'Processing cancelled. Upload a new barcode image.';
+                output.classList.remove('loading', 'error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+            }
+        });
+
+        // Reset upload state
+        function resetUploadState() {
+            processing = false;
+            fileInput.disabled = false;
+            cancelBtn.style.display = 'none';
+            fileInput.value = '';
+        }
+
+        // Scan QR code or barcode from video
+        async function scanCode() {
+            if (!scanning || !video.srcObject) {
+                output.textContent = scanMode === 'qr' ? 'Camera stopped. Start again or upload a QR code image.' : 'Camera stopped. Start again or upload a barcode image.';
+                output.classList.remove('loading', 'error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+                guideCtx.clearRect(0, 0, guideCanvas.width, guideCanvas.height); // Clear guide lines
+                return;
+            }
+
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                drawGuideLines(); // Update guide lines on each frame
+
+                if (scanMode === 'qr') {
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: 'attemptBoth'
+                    });
+                    if (code && code.data !== lastScannedContent) {
+                        lastScannedContent = code.data;
+                        output.textContent = `QR Code Content: ${code.data}`;
+                        output.classList.remove('loading', 'error');
+                        copyBtn.style.display = 'inline-block';
+                        copyMessage.style.display = 'none';
+                        triggerVibration(); // Trigger vibration on successful scan
+                    } else if (!lastScannedContent) {
+                        output.textContent = 'Scanning for QR code...';
+                        output.classList.add('loading');
+                        output.classList.remove('error');
+                        copyBtn.style.display = 'none';
+                        copyMessage.style.display = 'none';
+                    }
+                } else {
+                    try {
+                        const codeReader = new ZXing.BrowserMultiFormatReader();
+                        const result = await codeReader.decodeFromCanvas(canvas);
+                        if (result && result.text !== lastScannedContent) {
+                            lastScannedContent = result.text;
+                            output.textContent = `Barcode Content: ${result.text} (${result.format})`;
+                            output.classList.remove('loading', 'error');
+                            copyBtn.style.display = 'inline-block';
+                            copyMessage.style.display = 'none';
+                            triggerVibration(); // Trigger vibration on successful scan
+                        } else if (!lastScannedContent) {
+                            output.textContent = 'Scanning for barcode...';
+                            output.classList.add('loading');
+                            output.classList.remove('error');
+                            copyBtn.style.display = 'none';
+                            copyMessage.style.display = 'none';
+                        }
+                    } catch (err) {
+                        if (!lastScannedContent) {
+                            output.textContent = 'Scanning for barcode...';
+                            output.classList.add('loading');
+                            output.classList.remove('error');
+                            copyBtn.style.display = 'none';
+                            copyMessage.style.display = 'none';
+                        }
+                    }
+                }
+            } else if (!lastScannedContent) {
+                output.textContent = scanMode === 'qr' ? 'Scanning for QR code...' : 'Scanning for barcode...';
+                output.classList.add('loading');
+                output.classList.remove('error');
+                copyBtn.style.display = 'none';
+                copyMessage.style.display = 'none';
+            }
+
+            requestAnimationFrame(scanCode);
+        }
+
+        // Copy button logic
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = output.textContent.startsWith('QR Code Content: ') || output.textContent.startsWith('Barcode Content: ')
+                ? output.textContent.replace(/^(QR Code Content|Barcode Content): /, '').replace(/\s*\(.*\)$/, '') // Remove prefix and format
+                : output.textContent;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                copyMessage.textContent = 'Copied to clipboard!';
+                copyMessage.classList.remove('error');
+                copyMessage.style.display = 'inline-block';
+                setTimeout(() => {
+                    copyMessage.style.display = 'none';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                copyMessage.textContent = 'Failed to copy to clipboard.';
+                copyMessage.classList.add('error');
+                copyMessage.style.display = 'inline-block';
+                setTimeout(() => {
+                    copyMessage.style.display = 'none';
+                }, 2000);
+            });
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (video.videoWidth && video.videoHeight) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                drawGuideLines(); // Redraw guide lines on resize
+            }
+        });
+    </script>
+</body>
+</html>
